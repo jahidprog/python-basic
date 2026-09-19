@@ -85,7 +85,7 @@ You'll need **Python 3** installed on your machine.
 ### 1. Clone the repo
 
 ```bash
-git clone <your-repository-url>
+git clone https://github.com/jahidprog/python-basic.git
 cd python-basic
 ```
 
