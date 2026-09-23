@@ -1,6 +1,4 @@
 # 3Sum - Brute Force O(n^3)
-
-
 def three_sum(nums):
     n = len(nums)
     ans = []
@@ -35,3 +33,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+# O^2 solution
