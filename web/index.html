@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#ffffff"><title>Jahid’s Python Docs</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=4">
+</head>
+<body>
+<div class="app-shell">
+  <aside class="sidebar">
+    <a class="brand" href="#"><span class="brand-mark">py<span>.</span></span><span class="brand-name">Jahid’s Python<small>LEARNING DOCS</small></span></a>
+    <label class="search-box sidebar-search"><span>⌕</span><input id="search" type="search" placeholder="Search lessons…" autocomplete="off"><kbd>⌘ K</kbd></label>
+    <div class="docs-nav-caption">GET STARTED</div>
+    <button class="nav-item active" data-view="library"><span class="nav-icon">⌂</span> All lessons <span class="nav-count" id="total-count">—</span></button>
+    <button class="nav-item" data-view="saved"><span class="nav-icon">☆</span> Bookmarks <span class="nav-count" id="saved-count">0</span></button>
+    <div class="docs-nav-caption curriculum-caption">CURRICULUM</div>
+    <div id="category-nav" class="category-nav"></div>
+    <div class="docs-nav-caption files-caption">LESSONS <span id="result-count"></span></div>
+    <section class="lesson-list" id="lesson-list" aria-live="polite"></section>
+    <div class="sidebar-bottom"><div class="sidebar-progress"><span><b id="stat-done">0</b> of <b id="stat-total">—</b> completed</span><div class="progress-track"><span id="progress-bar"></span></div></div><div class="sidebar-foot"><span class="status-dot"></span> Saved locally on this device</div></div>
+  </aside>
+  <main class="main-area">
+    <header class="topbar"><div class="breadcrumb"><span class="docs-home">JAHID’S PYTHON DOCS</span><span>/</span><b id="crumb">GETTING STARTED</b></div><div class="top-right"><span class="local-badge"><i></i> LOCAL DOCS</span><button id="theme-toggle" class="theme-toggle" title="Toggle dark / light theme" aria-label="Toggle dark / light theme"><svg id="theme-icon-sun" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path></svg><svg id="theme-icon-moon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"></path></svg></button><span class="avatar">J</span></div></header>
+    <section class="page-content docs-page">
+      <div class="docs-layout"><main class="docs-main"><div class="docs-kicker" id="docs-kicker">PYTHON PRACTICE · YOUR PERSONAL NOTES</div><div class="content-grid"><aside class="detail-panel" id="detail-panel"><div class="docs-welcome"><div class="welcome-symbol">py<span>.</span></div><div class="docs-kicker">WELCOME TO YOUR PYTHON DOCS</div><h1>Learn Python, <span>one concept at a time.</span></h1><p>Browse your lessons in the sidebar. Open any file to study the explanation, explore the source, and practice the idea.</p><div class="welcome-stats"><div><b id="stat-files">—</b><span>lessons</span></div><div><b id="stat-categories">7</b><span>learning paths</span></div><div><b id="welcome-done">0</b><span>completed</span></div></div><div class="welcome-callout">✦ &nbsp;Tip: try to explain a concept from memory before you peek at the code.</div></div></aside></main><aside class="docs-rail"><section class="outline-panel" id="outline-panel"><div class="rail-title">ON THIS PAGE</div><a href="#source-section">Source code</a><a href="#study-tools">Study tools</a><div class="rail-divider"></div><div class="rail-title">YOUR PROGRESS</div><div class="rail-progress"><b id="rail-done">0</b> / <span id="rail-total">—</span> lessons explored</div><div class="progress-track"><span id="rail-progress-bar"></span></div></section><aside class="problem-panel" id="problem-panel" hidden></aside></aside></div>
+    </section>
+  </main>
+</div>
+<script src="/app.js?v=4"></script>
+</body></html>

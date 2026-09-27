@@ -82,6 +82,16 @@ The goal is to be able to **use Python to build things.**
 
 You'll need **Python 3** installed on your machine.
 
+### Open the study interface
+
+Start the local browser UI from the repository root:
+
+```bash
+python3 app.py
+```
+
+Then open [http://127.0.0.1:8000](http://127.0.0.1:8000). The interface reads your Python files directly from this repository. Bookmarks and explored lessons are saved in your browser on this device.
+
 ### 1. Clone the repo
 
 ```bash
