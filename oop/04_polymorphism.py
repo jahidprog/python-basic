@@ -1,4 +1,4 @@
-# Polymorphism
+# Polymorphism --> Function overriding
 
 class Employee:
     def get_designation(self):
