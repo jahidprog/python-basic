@@ -1,16 +1,12 @@
 # Polymorphism
 
-class Cat:
-    def speak(self):
-        return "Meow"
+class Employee:
+    def get_designation(self):
+        print("Designation: Employee")
 
+class Teacher(Employee):
+    def get_designation(self):
+        print("Designation is: Teacher")
 
-class Dog:
-    def speak(self):
-        return "Woof"
-
-
-animals = [Cat(), Dog()]
-
-for animal in animals:
-    print(animal.speak())
+t1 = Teacher()
+t1.get_designation()
