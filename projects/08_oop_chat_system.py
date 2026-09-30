@@ -97,7 +97,7 @@ if __name__ == "__main__":
     u4.join_chatroom(room)
     u4.send_message("Vlo nai")
 
-    # room.show_chat_history()
+    room.show_chat_history()
     u1.leave_chatroom()
     u2.leave_chatroom()
     u3.leave_chatroom()
