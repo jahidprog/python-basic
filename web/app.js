@@ -1,7 +1,7 @@
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const readSet = (key) => new Set(JSON.parse(localStorage.getItem(key) || '[]'));
-const state = { items: [], category: 'all', view: 'library', query: '', selected: null, mode: 'code', challenge: false, saved: readSet('pyroom-saved'), done: readSet('pyroom-done') };
+const state = { items: [], notes: [], activeNote: null, category: 'all', view: 'library', query: '', selected: null, mode: 'code', challenge: false, saved: readSet('pyroom-saved'), done: readSet('pyroom-done') };
 const problemBriefs = {
   'problems/03_two_sum.py': { id:'1', name:'Two Sum', difficulty:'Easy', tags:'Array · Hash table', description:'Given an integer array and a target, return the indices of two distinct values that add up to the target. Assume exactly one answer exists.', example:'nums = [2, 7, 11, 15], target = 9  →  [0, 1]', url:'https://leetcode.com/problems/two-sum/' },
   'problems/01_reverse_string.py': { id:'344', name:'Reverse String · practice version', difficulty:'Easy', tags:'String · Two pointers', description:'Reverse the characters in a string. This repository demonstrates slicing and a loop; LeetCode’s original version asks you to reverse a character array in place.', example:'s = ["h", "e", "l", "l", "o"]  →  ["o", "l", "l", "e", "h"]', url:'https://leetcode.com/problems/reverse-string/' },
@@ -36,7 +36,11 @@ function stats() {
 }
 function nav() {
   const cats = [...new Set(state.items.map(x => x.category))];
-  $('#category-nav').innerHTML = cats.map(c => `<button class="category-link ${state.category === c ? 'active' : ''}" data-category="${esc(c)}"><i class="cat-dot"></i>${esc(labelFor(c))}<span class="nav-count">${state.items.filter(x => x.category === c).length}</span></button>`).join('');
+  $('#category-nav').innerHTML = cats.map(c => {
+    const lessons = state.items.filter(x => x.category === c);
+    const complete = lessons.filter(x => state.done.has(x.path)).length;
+    return `<button class="category-link ${state.category === c ? 'active' : ''}" data-category="${esc(c)}" aria-pressed="${state.category === c}"><i class="cat-dot"></i>${esc(labelFor(c))}<span class="nav-count" title="${complete} of ${lessons.length} explored">${complete}/${lessons.length}</span></button>`;
+  }).join('');
   $('#category-nav').querySelectorAll('[data-category]').forEach(b => b.onclick = () => {
     state.view = 'library'; state.category = b.dataset.category; state.query = ''; $('#search').value = '';
     const first = state.items.find(item => item.category === state.category);
@@ -44,19 +48,42 @@ function nav() {
     resetLessonScroll();
   });
 }
+function renderNotesNav() {
+  const host = $('#notes-nav');
+  if (!host) return;
+  host.innerHTML = state.notes.length ? state.notes.map(note => `<button class="note-link ${state.activeNote?.name === note.name ? 'active' : ''}" data-note="${esc(note.name)}" title="${esc(note.title)}"><span class="pdf-icon">PDF</span><span class="note-link-title">${esc(note.title)}</span></button>`).join('') : '<div class="notes-empty">No PDFs in notes/ yet</div>';
+  host.querySelectorAll('[data-note]').forEach(button => button.onclick = () => openNote(button.dataset.note));
+}
 function updateNav() {
   document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === state.view));
-  document.querySelectorAll('.category-link').forEach(b => b.classList.toggle('active', b.dataset.category === state.category));
-  $('#crumb').textContent = state.view === 'saved' ? 'BOOKMARKS' : state.category === 'all' ? 'ALL LESSONS' : labelFor(state.category).toUpperCase();
-  $('#docs-kicker').textContent = state.selected ? `${state.selected.categoryLabel.toUpperCase()} · YOUR PERSONAL NOTES` : 'PYTHON PRACTICE · YOUR PERSONAL NOTES';
+  document.querySelectorAll('.category-link').forEach(b => b.classList.toggle('active', state.view !== 'notes' && b.dataset.category === state.category));
+  $('#crumb').textContent = state.view === 'notes' ? (state.activeNote?.title || 'PDF NOTES').toUpperCase() : state.view === 'saved' ? 'BOOKMARKS' : state.category === 'all' ? 'ALL LESSONS' : labelFor(state.category).toUpperCase();
+  $('#docs-kicker').textContent = state.view === 'notes' ? 'YOUR STUDY MATERIALS · PDF READER' : state.selected ? `${state.selected.categoryLabel.toUpperCase()} · YOUR PERSONAL NOTES` : 'PYTHON PRACTICE · YOUR PERSONAL NOTES';
 }
 function filtered() { return state.items.filter(x => (state.view !== 'saved' || state.saved.has(x.path)) && (state.category === 'all' || x.category === state.category) && (!state.query || `${x.title} ${x.categoryLabel} ${x.path}`.toLowerCase().includes(state.query.toLowerCase()))); }
 function render() {
-  stats(); updateNav(); const items = filtered();
+  nav(); renderNotesNav(); stats(); updateNav(); const items = filtered();
   $('#result-count').textContent = items.length ? `· ${items.length}` : '';
-  $('#lesson-list').innerHTML = items.length ? items.map(x => `<article class="lesson-row ${state.selected?.path === x.path ? 'selected' : ''}" data-path="${esc(x.path)}"><div class="file-icon">${x.category === 'problems' ? '{}' : x.category === 'projects' ? '↗' : x.category === 'oop' ? '◈' : 'py'}</div><div class="lesson-copy"><div class="lesson-title">${esc(x.title)}</div><div class="lesson-meta">${esc(x.categoryLabel)}<i class="meta-dot"></i>${esc(x.path.split('/').at(-1))}</div></div><div class="lesson-trailing">${state.done.has(x.path) ? '<span class="done-mark">✓</span>' : ''}<button class="bookmark-btn ${state.saved.has(x.path) ? 'saved' : ''}" data-save="${esc(x.path)}" title="Bookmark">${state.saved.has(x.path) ? '★' : '☆'}</button><span class="row-arrow">›</span></div></article>`).join('') : `<div class="empty-state">${state.view === 'saved' ? 'No bookmarks yet. Tap ☆ on a file to save it.' : 'No files match that search.'}</div>`;
-  $('#lesson-list').querySelectorAll('.lesson-row').forEach(row => row.onclick = e => { if (!e.target.closest('[data-save]')) openFile(row.dataset.path); });
+  $('#lesson-list').innerHTML = items.length ? items.map(x => `<article class="lesson-row ${state.selected?.path === x.path ? 'selected' : ''}" data-path="${esc(x.path)}" role="button" tabindex="0" aria-current="${state.selected?.path === x.path ? 'page' : 'false'}"><div class="file-icon">${x.category === 'problems' ? '{}' : x.category === 'projects' ? '↗' : x.category === 'oop' ? '◈' : x.category === 'numpy' ? 'np' : x.category === 'pandas' ? 'pd' : 'py'}</div><div class="lesson-copy"><div class="lesson-title">${esc(x.title)}</div><div class="lesson-meta">${esc(x.categoryLabel)}<i class="meta-dot"></i>${esc(x.path.split('/').at(-1))}</div></div><div class="lesson-trailing">${state.done.has(x.path) ? '<span class="done-mark" aria-label="Explored">✓</span>' : ''}<button class="bookmark-btn ${state.saved.has(x.path) ? 'saved' : ''}" data-save="${esc(x.path)}" title="${state.saved.has(x.path) ? 'Remove bookmark' : 'Bookmark lesson'}" aria-label="${state.saved.has(x.path) ? 'Remove bookmark' : 'Bookmark lesson'}">${state.saved.has(x.path) ? '★' : '☆'}</button><span class="row-arrow" aria-hidden="true">›</span></div></article>`).join('') : `<div class="empty-state">${state.view === 'saved' ? 'No bookmarks yet. Tap ☆ on a file to save it.' : 'No files match that search.'}</div>`;
+  $('#lesson-list').querySelectorAll('.lesson-row').forEach(row => {
+    row.onclick = e => { if (!e.target.closest('[data-save]')) openFile(row.dataset.path); };
+    row.onkeydown = e => { if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('[data-save]')) { e.preventDefault(); openFile(row.dataset.path); } };
+  });
   $('#lesson-list').querySelectorAll('[data-save]').forEach(btn => btn.onclick = e => { e.stopPropagation(); toggleSaved(btn.dataset.save); render(); });
+}
+function openNote(name) {
+  const note = state.notes.find(item => item.name === name);
+  if (!note) return;
+  state.view = 'notes'; state.activeNote = note;
+  render();
+  const panel = $('#detail-panel');
+  panel.classList.add('has-selection', 'pdf-detail');
+  document.querySelector('.docs-layout').classList.remove('problem-layout');
+  $('#outline-panel').hidden = true;
+  $('#problem-panel').hidden = true;
+  const src = `/api/notes/${encodeURIComponent(note.name)}#view=FitH`;
+  const encodedName = encodeURIComponent(note.name);
+  panel.innerHTML = `<div class="pdf-reader-head"><div><div class="detail-tag">STUDY NOTES <span class="tag-separator">/</span> PDF DOCUMENT</div><h1 class="pdf-title">${esc(note.title)}</h1><div class="pdf-meta">${(note.size / 1024 / 1024).toFixed(1)} MB · Opens in your browser’s PDF reader</div></div><div class="pdf-actions"><a class="action-btn" href="/api/notes/${encodedName}" download="${esc(note.name)}">Download</a><a class="action-btn" href="${src}" target="_blank" rel="noopener noreferrer">Open in new tab ↗</a></div></div><div class="pdf-reader-hint"><span>↕</span> Use the reader toolbar to search text, change zoom, move between pages, or print.</div><iframe class="pdf-frame" src="${src}" title="PDF reader: ${esc(note.title)}"></iframe>`;
 }
 function toggleSaved(path) { state.saved.has(path) ? state.saved.delete(path) : state.saved.add(path); persist(); }
 function tokenized(source) {
@@ -84,8 +111,10 @@ function challengeFor(item) {
 }
 function openFile(path) {
   const item = state.items.find(x => x.path === path); if (!item) return;
+  state.activeNote = null;
   state.selected = item; state.mode = 'code'; state.challenge = false; render();
   const panel = $('#detail-panel'), brief = problemBriefs[path], layout = document.querySelector('.docs-layout');
+  panel.classList.remove('pdf-detail');
   panel.classList.add('has-selection'); layout.classList.toggle('problem-layout', Boolean(brief));
   $('#outline-panel').hidden = Boolean(brief);
   $('#problem-panel').hidden = !brief;
@@ -121,6 +150,7 @@ function showDetail(item, code) {
   if ($('#show-hint')) $('#show-hint').onclick = () => { $('#hint-box').hidden = !$('#hint-box').hidden; $('#show-hint').textContent = $('#hint-box').hidden ? 'Show a hint' : 'Hide hint'; };
 }
 document.querySelectorAll('.nav-item').forEach(b => b.onclick = () => {
+  state.activeNote = null;
   state.view = b.dataset.view; state.category = 'all'; state.query = ''; $('#search').value = '';
   const first = filtered()[0];
   if (first) openFile(first.path); else { state.selected = null; render(); }
@@ -146,6 +176,9 @@ window.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key.
 $('#search').addEventListener('keydown', e => { if (e.key === 'Escape') e.target.value = ''; });
 (async () => {
   try {
-    state.items = await (await fetch('/api/files')).json(); nav(); render();
+    const [filesResponse, notesResponse] = await Promise.all([fetch('/api/files'), fetch('/api/notes')]);
+    state.items = await filesResponse.json();
+    state.notes = await notesResponse.json();
+    nav(); renderNotesNav(); render();
   } catch { $('#lesson-list').innerHTML = '<div class="empty-state">Start the app with <code>python3 app.py</code> to load your files.</div>'; }
 })();

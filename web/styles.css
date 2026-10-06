@@ -145,3 +145,51 @@ body{background:#fff;color:#171717;font-family:var(--sans);font-size:14px}.app-s
 :root[data-theme="dark"] .empty-detail h3{color:#ededed}
 :root[data-theme="dark"] .empty-detail p{color:#666}
 :root[data-theme="dark"] .empty-orbit{background:#111;border-color:#262626;color:#888;box-shadow:0 0 0 8px #111}
+
+/* PDF notes and a sidebar that remains reachable on short and narrow screens. */
+.sidebar{overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#c8d6e4 transparent}
+.sidebar .lesson-list{flex:0 0 auto;min-height:0;max-height:min(42vh,420px)}
+.reading-caption{margin-top:18px}
+.notes-nav{display:grid;gap:2px;margin-bottom:12px}
+.note-link{width:100%;min-width:0;display:flex;align-items:center;gap:9px;border:0;border-radius:5px;background:transparent;padding:7px 9px;text-align:left;color:#555;font:500 11px var(--sans);cursor:pointer}
+.note-link:hover,.note-link.active{background:#eef6ff;color:#0070f3}
+.pdf-icon{flex:0 0 auto;display:grid;place-items:center;width:27px;height:27px;border:1px solid #f0dada;border-radius:4px;background:#fff7f7;color:#c44949;font:8px var(--mono)}
+.note-link-title{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.notes-empty{padding:7px 10px;color:#999;font-size:10px}
+.detail-panel.pdf-detail{background:transparent;border:0;box-shadow:none;overflow:visible}
+.pdf-reader-head{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;padding:0 0 17px;border-bottom:1px solid #e8e8e8}
+.pdf-title{margin:8px 0 5px;font:600 clamp(22px,3vw,30px)/1.15 var(--display);letter-spacing:-.8px;color:#171717;overflow-wrap:anywhere}
+.pdf-meta{font:10px var(--mono);color:#888}
+.pdf-actions{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end}
+.pdf-actions .action-btn{text-decoration:none}
+.pdf-reader-hint{display:flex;align-items:center;gap:8px;padding:12px 2px;color:#777;font-size:11px}
+.pdf-reader-hint span{color:#0070f3;font-size:16px}
+.pdf-frame{display:block;width:100%;height:calc(100vh - 220px);min-height:520px;border:1px solid #dedede;border-radius:6px;background:#f3f3f3}
+@media(max-width:760px){
+  .sidebar{position:sticky;top:0;z-index:12;display:flex;flex-direction:column;align-items:stretch;height:auto;min-height:0;max-height:54vh;overflow-x:hidden;overflow-y:auto;padding:10px 14px 12px;background:#fff;box-shadow:0 4px 14px #1111110b}
+  .sidebar .brand,.sidebar-search,.sidebar>.docs-nav-caption,.sidebar>.nav-item,.sidebar>.category-nav,.sidebar-bottom{flex-shrink:0}
+  .sidebar .category-nav{order:0;display:flex;flex:0 0 auto;overflow-x:auto;overflow-y:hidden}
+  .sidebar .lesson-list{display:flex;flex:0 0 auto;flex-direction:column;max-height:20vh;overflow-x:hidden;overflow-y:auto;padding:0 2px 5px}
+  .sidebar .lesson-row{flex:0 0 auto;max-width:none;width:100%}
+  .notes-nav{flex:0 0 auto}
+  .pdf-reader-head{align-items:flex-start;flex-direction:column}
+  .pdf-actions{justify-content:flex-start}
+  .pdf-frame{height:68vh;min-height:420px}
+}
+@media(max-width:420px){
+  .sidebar{max-height:58vh;padding-right:10px;padding-left:10px}
+  .sidebar-search{width:100%}
+  .sidebar .nav-item{justify-content:flex-start;width:100%;font-size:11px}
+  .sidebar .nav-icon{display:inline-block}
+  .pdf-frame{height:64vh;min-height:360px}
+  .pdf-reader-hint{align-items:flex-start;font-size:10px;line-height:1.5}
+}
+:root[data-theme="dark"] .note-link{color:#a1a1a1}
+:root[data-theme="dark"] .note-link:hover,:root[data-theme="dark"] .note-link.active{background:#111d2b;color:#3291ff}
+:root[data-theme="dark"] .pdf-icon{background:#211313;border-color:#3b2424;color:#ff8585}
+:root[data-theme="dark"] .notes-empty,:root[data-theme="dark"] .pdf-meta{color:#777}
+:root[data-theme="dark"] .pdf-title{color:#ededed}
+:root[data-theme="dark"] .pdf-reader-head{border-bottom-color:#262626}
+:root[data-theme="dark"] .pdf-reader-hint{color:#999}
+:root[data-theme="dark"] .pdf-frame{border-color:#333;background:#111}
+@media(max-width:760px){:root[data-theme="dark"] .sidebar{background:#0a0a0a}}
