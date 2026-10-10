@@ -37,4 +37,4 @@ print("\nFirst row:")
 print(matrix[0])
 
 print("\nElement at row 2, column 3:")
-print(matrix[1, 2])
+print(matrix[1, 2]) 
