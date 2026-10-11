@@ -1,7 +1,22 @@
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
 const readSet = (key) => new Set(JSON.parse(localStorage.getItem(key) || '[]'));
-const state = { items: [], notes: [], activeNote: null, category: 'all', view: 'library', query: '', selected: null, mode: 'code', challenge: false, saved: readSet('pyroom-saved'), done: readSet('pyroom-done') };
+const state = { items: [], notes: [], activeNote: null, category: 'all', view: 'library', query: '', selected: null, mode: 'code', challenge: false, saved: readSet('pyroom-saved'), done: readSet('pyroom-done'), review: JSON.parse(localStorage.getItem('pyroom-review') || '{}'), quizAnswered: false };
+const quizBank = {
+  basics: { question:'Which built-in type represents a whole number?', choices:['int','str','float','bool'], answer:0, why:'Integers use the int type; float represents numbers with a fractional part.' },
+  'data-structures': { question:'Which collection keeps only unique values?', choices:['list','tuple','set','dict'], answer:2, why:'A set removes duplicate values and supports fast membership checks.' },
+  functions: { question:'What does return do inside a function?', choices:['Prints a value only','Sends a result back to the caller','Repeats the function','Renames the function'], answer:1, why:'return ends the function call and gives a value back to the caller.' },
+  oop: { question:'In object-oriented Python, what is a class?', choices:['A blueprint for creating objects','A loop over objects','A file format','A special kind of list'], answer:0, why:'A class defines the data and behavior its objects can have.' },
+  problems: { question:'For Two Sum, what does a hash map help you find quickly?', choices:['The input length','A previously seen complement','The largest number','All duplicate values'], answer:1, why:'Store values already seen so each number’s complement can be checked quickly.' },
+  projects: { question:'Which standard library module can store Python data as JSON?', choices:['random','json','math','pathlib'], answer:1, why:'The json module reads and writes JSON data.' },
+  experiments: { question:'In an HTTP request example, what does a response status code describe?', choices:['The Python version','Whether and how the request succeeded','The file size','The request timeout'], answer:1, why:'The status code summarizes the server’s result for the request.' },
+  numpy: { question:'A matrix has shape (2, 3). Which vector shape broadcasts across its rows?', choices:['(2,)','(3,)','(4,)','(2, 2)'], answer:1, why:'A length-3 vector aligns with the matrix’s last dimension.' },
+  pandas: { question:'What does .iloc select by?', choices:['Row and column labels','Integer positions','Data types','Missing values'], answer:1, why:'.iloc uses integer positions; .loc uses labels.' },
+  'file-io': { question:'Why is `with open(...) as file` useful?', choices:['It closes the file automatically','It makes the file read-only','It creates a CSV','It skips encoding'], answer:0, why:'The context manager closes the file when the block ends, including after errors.' }
+};
+let pythonWorker = null;
+let workerReady = false;
+let workerTimer = null;
 const problemBriefs = {
   'problems/03_two_sum.py': { id:'1', name:'Two Sum', difficulty:'Easy', tags:'Array · Hash table', description:'Given an integer array and a target, return the indices of two distinct values that add up to the target. Assume exactly one answer exists.', example:'nums = [2, 7, 11, 15], target = 9  →  [0, 1]', url:'https://leetcode.com/problems/two-sum/' },
   'problems/01_reverse_string.py': { id:'344', name:'Reverse String · practice version', difficulty:'Easy', tags:'String · Two pointers', description:'Reverse the characters in a string. This repository demonstrates slicing and a loop; LeetCode’s original version asks you to reverse a character array in place.', example:'s = ["h", "e", "l", "l", "o"]  →  ["o", "l", "l", "e", "h"]', url:'https://leetcode.com/problems/reverse-string/' },
@@ -24,11 +39,23 @@ const problemBriefs = {
 const notesKey = (path) => `pyroom-note:${path}`;
 const labelFor = (key) => state.items.find(x => x.category === key)?.categoryLabel || key;
 function persist() { localStorage.setItem('pyroom-saved', JSON.stringify([...state.saved])); localStorage.setItem('pyroom-done', JSON.stringify([...state.done])); }
+function persistReview() { localStorage.setItem('pyroom-review', JSON.stringify(state.review)); }
+function duePaths() { const now = Date.now(); return Object.entries(state.review).filter(([, value]) => value.due <= now).map(([path]) => path); }
+function nextLesson(from = null) { const pending = state.items.find(item => !state.done.has(item.path)); return pending || (from ? state.items.find(item => item.path === from.path) : state.items[0]); }
+function openNextInPath(path, direction = 1) {
+  const current = state.items.find(item => item.path === path);
+  if (!current) return;
+  const pathItems = state.items.filter(item => item.category === current.category);
+  const index = pathItems.findIndex(item => item.path === path);
+  const target = pathItems[index + direction];
+  if (target) openFile(target.path);
+}
 function resetLessonScroll() { const list = $('#lesson-list'); list.scrollTop = 0; list.scrollLeft = 0; }
 function setText(sel, value) { const el = $(sel); if (el) el.textContent = value; }
 function stats() {
   const n = state.items.length, d = state.done.size;
   setText('#total-count', n); setText('#saved-count', state.saved.size); setText('#stat-files', n);
+  setText('#review-count', duePaths().length);
   setText('#stat-total', n); setText('#stat-done', d); setText('#stat-categories', new Set(state.items.map(x => x.category)).size);
   setText('#welcome-done', d); setText('#rail-done', d); setText('#rail-total', n);
   const bar = $('#progress-bar'); if (bar) bar.style.width = `${n ? Math.min(100, d / n * 100) : 0}%`;
@@ -44,7 +71,7 @@ function nav() {
   $('#category-nav').querySelectorAll('[data-category]').forEach(b => b.onclick = () => {
     state.view = 'library'; state.category = b.dataset.category; state.query = ''; $('#search').value = '';
     const first = state.items.find(item => item.category === state.category);
-    if (first) openFile(first.path); else render();
+    if (first) { openFile(first.path); if (window.matchMedia('(max-width: 760px)').matches) setMobileNav(true); } else render();
     resetLessonScroll();
   });
 }
@@ -57,17 +84,17 @@ function renderNotesNav() {
 function updateNav() {
   document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.view === state.view));
   document.querySelectorAll('.category-link').forEach(b => b.classList.toggle('active', state.view !== 'notes' && b.dataset.category === state.category));
-  $('#crumb').textContent = state.view === 'notes' ? (state.activeNote?.title || 'PDF NOTES').toUpperCase() : state.view === 'saved' ? 'BOOKMARKS' : state.category === 'all' ? 'ALL LESSONS' : labelFor(state.category).toUpperCase();
+  $('#crumb').textContent = state.view === 'notes' ? (state.activeNote?.title || 'PDF NOTES').toUpperCase() : state.view === 'saved' ? 'BOOKMARKS' : state.view === 'review' ? 'REVIEW DUE' : state.category === 'all' ? 'ALL LESSONS' : labelFor(state.category).toUpperCase();
   $('#docs-kicker').textContent = state.view === 'notes' ? 'YOUR STUDY MATERIALS · PDF READER' : state.selected ? `${state.selected.categoryLabel.toUpperCase()} · YOUR PERSONAL NOTES` : 'PYTHON PRACTICE · YOUR PERSONAL NOTES';
 }
-function filtered() { return state.items.filter(x => (state.view !== 'saved' || state.saved.has(x.path)) && (state.category === 'all' || x.category === state.category) && (!state.query || `${x.title} ${x.categoryLabel} ${x.path}`.toLowerCase().includes(state.query.toLowerCase()))); }
+function filtered() { const due = new Set(duePaths()); return state.items.filter(x => (state.view !== 'saved' || state.saved.has(x.path)) && (state.view !== 'review' || due.has(x.path)) && (state.category === 'all' || x.category === state.category) && (!state.query || `${x.title} ${x.categoryLabel} ${x.path}`.toLowerCase().includes(state.query.toLowerCase()))); }
 function render() {
   nav(); renderNotesNav(); stats(); updateNav(); const items = filtered();
   $('#result-count').textContent = items.length ? `· ${items.length}` : '';
-  $('#lesson-list').innerHTML = items.length ? items.map(x => `<article class="lesson-row ${state.selected?.path === x.path ? 'selected' : ''}" data-path="${esc(x.path)}" role="button" tabindex="0" aria-current="${state.selected?.path === x.path ? 'page' : 'false'}"><div class="file-icon">${x.category === 'problems' ? '{}' : x.category === 'projects' ? '↗' : x.category === 'oop' ? '◈' : x.category === 'numpy' ? 'np' : x.category === 'pandas' ? 'pd' : 'py'}</div><div class="lesson-copy"><div class="lesson-title">${esc(x.title)}</div><div class="lesson-meta">${esc(x.categoryLabel)}<i class="meta-dot"></i>${esc(x.path.split('/').at(-1))}</div></div><div class="lesson-trailing">${state.done.has(x.path) ? '<span class="done-mark" aria-label="Explored">✓</span>' : ''}<button class="bookmark-btn ${state.saved.has(x.path) ? 'saved' : ''}" data-save="${esc(x.path)}" title="${state.saved.has(x.path) ? 'Remove bookmark' : 'Bookmark lesson'}" aria-label="${state.saved.has(x.path) ? 'Remove bookmark' : 'Bookmark lesson'}">${state.saved.has(x.path) ? '★' : '☆'}</button><span class="row-arrow" aria-hidden="true">›</span></div></article>`).join('') : `<div class="empty-state">${state.view === 'saved' ? 'No bookmarks yet. Tap ☆ on a file to save it.' : 'No files match that search.'}</div>`;
+  $('#lesson-list').innerHTML = items.length ? items.map(x => `<article class="lesson-row ${state.selected?.path === x.path ? 'selected' : ''}" data-path="${esc(x.path)}" role="button" tabindex="0" aria-current="${state.selected?.path === x.path ? 'page' : 'false'}"><div class="file-icon">${x.category === 'problems' ? '{}' : x.category === 'projects' ? '↗' : x.category === 'oop' ? '◈' : x.category === 'numpy' ? 'np' : x.category === 'pandas' ? 'pd' : 'py'}</div><div class="lesson-copy"><div class="lesson-title">${esc(x.title)}</div><div class="lesson-meta">${esc(x.categoryLabel)}<i class="meta-dot"></i>${esc(x.path.split('/').at(-1))}</div></div><div class="lesson-trailing">${state.done.has(x.path) ? '<span class="done-mark" aria-label="Explored">✓</span>' : ''}<button class="bookmark-btn ${state.saved.has(x.path) ? 'saved' : ''}" data-save="${esc(x.path)}" title="${state.saved.has(x.path) ? 'Remove bookmark' : 'Bookmark lesson'}" aria-label="${state.saved.has(x.path) ? 'Remove bookmark' : 'Bookmark lesson'}">${state.saved.has(x.path) ? '★' : '☆'}</button><span class="row-arrow" aria-hidden="true">›</span></div></article>`).join('') : `<div class="empty-state">${state.view === 'saved' ? 'No bookmarks yet. Tap ☆ on a file to save it.' : state.view === 'review' ? 'Nothing is due right now. Answer a lesson quiz and choose a review time.' : 'No files match that search.'}</div>`;
   $('#lesson-list').querySelectorAll('.lesson-row').forEach(row => {
-    row.onclick = e => { if (!e.target.closest('[data-save]')) openFile(row.dataset.path); };
-    row.onkeydown = e => { if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('[data-save]')) { e.preventDefault(); openFile(row.dataset.path); } };
+    row.onclick = e => { if (!e.target.closest('[data-save]')) { openFile(row.dataset.path); if (window.matchMedia('(max-width: 760px)').matches) setMobileNav(true); } };
+    row.onkeydown = e => { if ((e.key === 'Enter' || e.key === ' ') && !e.target.closest('[data-save]')) { e.preventDefault(); openFile(row.dataset.path); if (window.matchMedia('(max-width: 760px)').matches) setMobileNav(true); } };
   });
   $('#lesson-list').querySelectorAll('[data-save]').forEach(btn => btn.onclick = e => { e.stopPropagation(); toggleSaved(btn.dataset.save); render(); });
 }
@@ -109,8 +136,63 @@ function challengeFor(item) {
   if (item.category !== 'problems') return `Make a small change to <b>${esc(item.title)}</b>: add a test case, handle an edge case, or explain why the current approach works.`;
   return `Try solving <b>${esc(item.title)}</b> from a blank file first. Write down your approach, test a normal case and an edge case, then compare with the repository solution.`;
 }
+function quizContent(item) {
+  const quiz = quizBank[item.category] || quizBank.basics;
+  return `<section class="quiz-card"><div class="quiz-kicker">QUICK CHECK · ${esc(item.categoryLabel.toUpperCase())}</div><h2>${esc(quiz.question)}</h2><div class="quiz-choices">${quiz.choices.map((choice, index) => `<label><input type="radio" name="lesson-quiz" value="${index}"><span>${esc(choice)}</span></label>`).join('')}</div><button class="action-btn" id="check-answer">Check answer</button><div class="quiz-feedback" id="quiz-feedback" aria-live="polite" hidden></div><div class="review-schedule" id="review-schedule" hidden><span>When should this come back?</span><div><button data-review="again">Again · 10 min</button><button data-review="hard">Hard · 1 day</button><button data-review="good">Good · 3 days</button><button data-review="easy">Easy · 7 days</button></div></div></section>`;
+}
+function runnerContent(item, code) {
+  const saved = localStorage.getItem(`pyroom-code:${item.path}`);
+  return `<section class="runner-card"><div class="runner-head"><div><b>Python playground</b><small>Runs locally in a browser worker. Standard library only; input() is not supported.</small></div><button class="action-btn" id="reset-editor">Reset</button></div><textarea id="runner-editor" spellcheck="false" aria-label="Editable Python code">${esc(saved ?? code)}</textarea><div class="runner-actions"><button class="action-btn run-code-btn" id="run-code">▶ Run code</button><button class="action-btn" id="stop-code" hidden>Stop</button><span id="runner-status" role="status">The Python runtime loads the first time you run code.</span></div><pre class="runner-output" id="runner-output" aria-live="polite">Output will appear here.</pre></section>`;
+}
+function pathNavigation(item) {
+  const lessons = state.items.filter(entry => entry.category === item.category);
+  const index = lessons.findIndex(entry => entry.path === item.path);
+  const completed = lessons.filter(entry => state.done.has(entry.path)).length;
+  return `<section class="path-navigation"><div><span class="path-kicker">LEARNING PATH · ${esc(item.categoryLabel.toUpperCase())}</span><b>${index + 1} of ${lessons.length} · ${completed} explored</b><div class="path-progress"><span style="width:${lessons.length ? completed / lessons.length * 100 : 0}%"></span></div></div><div class="path-buttons"><button class="action-btn" id="path-previous" ${index <= 0 ? 'disabled' : ''}>← Previous</button><button class="action-btn" id="path-next" ${index >= lessons.length - 1 ? 'disabled' : ''}>Next lesson →</button></div></section>`;
+}
+function ensurePythonWorker() {
+  if (pythonWorker) return;
+  const source = `importScripts('https://cdn.jsdelivr.net/pyodide/v314.0.7/full/pyodide.js');
+let runtime;
+self.onmessage = async ({data}) => {
+  if (data.type !== 'run') return;
+  try {
+    if (!runtime) runtime = await loadPyodide();
+    self.postMessage({type:'ready'});
+    runtime.globals.set('lesson_source', data.code);
+    const output = runtime.runPython(\`import contextlib, io, traceback
+_buffer = io.StringIO()
+try:
+    with contextlib.redirect_stdout(_buffer), contextlib.redirect_stderr(_buffer):
+        exec(compile(lesson_source, '<lesson>', 'exec'), {'__name__': '__main__'})
+except BaseException:
+    traceback.print_exc(file=_buffer)
+_buffer.getvalue() or '(No output)'
+\`);
+    self.postMessage({type:'result', output});
+  } catch (error) {
+    self.postMessage({type:'result', output:String(error)});
+  }
+};`;
+  const workerUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+  pythonWorker = new Worker(workerUrl);
+  URL.revokeObjectURL(workerUrl);
+}
+function cancelPythonWorker() {
+  clearTimeout(workerTimer);
+  if (pythonWorker) pythonWorker.terminate();
+  pythonWorker = null; workerReady = false;
+}
+function scheduleReview(path, rating) {
+  const delays = { again: 10 * 60 * 1000, hard: 24 * 60 * 60 * 1000, good: 3 * 24 * 60 * 60 * 1000, easy: 7 * 24 * 60 * 60 * 1000 };
+  state.review[path] = { due: Date.now() + delays[rating], rating };
+  persistReview(); render();
+  const schedule = $('#review-schedule');
+  if (schedule) schedule.innerHTML = `<span>Saved. This lesson is due ${new Date(state.review[path].due).toLocaleString()}.</span>`;
+}
 function openFile(path) {
   const item = state.items.find(x => x.path === path); if (!item) return;
+  cancelPythonWorker();
   state.activeNote = null;
   state.selected = item; state.mode = 'code'; state.challenge = false; render();
   const panel = $('#detail-panel'), brief = problemBriefs[path], layout = document.querySelector('.docs-layout');
@@ -130,13 +212,17 @@ function showDetail(item, code) {
   const savedSize = Math.max(12, Math.min(22, Number(localStorage.getItem('pyroom-code-size') || 15)));
   const first = code.split('\n').find(l => l.trim().startsWith('#'))?.replace(/^\s*#\s*/, '') || 'A Python practice file from your library.';
   const note = localStorage.getItem(notesKey(item.path)) || '';
-  const modeContent = state.mode === 'code' ? `<div class="study-note"><span class="note-icon">✦</span><div><b>Quick idea</b><br>${esc(first)}. Read once, then explain it without looking.</div></div><div class="code-toolbar" id="source-section"><span>🐍 PYTHON SOURCE · ${lines.length} LINES</span><div class="code-controls"><button class="try-first-btn" id="hide-solution">${state.challenge ? 'Show solution' : '🙈 Try first'}</button><div class="size-control" aria-label="Code font size"><button id="font-down" title="Smaller code">−</button><span id="font-size-label">${savedSize}px</span><button id="font-up" title="Larger code">+</button></div></div></div>${state.challenge ? `<div class="challenge-cover"><div class="challenge-emoji">🧠</div><b>First, solve it yourself.</b><p>${challengeFor(item)}</p><button class="action-btn" id="reveal-code">I’m ready to compare →</button></div>` : `<div class="code-scroll"><div class="code-content" style="font-size:${savedSize}px"><div class="line-numbers">${lines.map((_, i) => i + 1).join('\n')}</div><pre>${tokenized(code)}</pre></div></div>`}` : state.mode === 'recall' ? `<div class="recall-card"><div class="recall-head"><span>✍️</span><div><b>Active recall</b><small>Close the code and retrieve it from memory.</small></div></div><p class="recall-question">${esc(learningPrompt(item, code))}</p><textarea id="recall-note" placeholder="Write what you remember…">${esc(note)}</textarea><div class="recall-foot"><span id="note-status">${note ? 'Saved on this device' : 'Your note saves automatically'}</span><button class="action-btn" id="show-hint">Show a hint</button></div><div class="hint-box" id="hint-box" hidden>${esc(first)}</div></div>` : `<div class="practice-card"><div class="practice-label">YOUR MINI CHALLENGE</div><div class="challenge-big">${item.category === 'problems' ? 'Solve it before you peek.' : 'Make the idea yours.'}</div><p>${challengeFor(item)}</p><div class="practice-steps"><div><i>1</i><span>Try it in your editor</span></div><div><i>2</i><span>Test one edge case</span></div><div><i>3</i><span>Explain the solution</span></div></div><button class="action-btn wide-btn" id="practice-peek">Open the repository code →</button></div>`;
+  let modeContent = state.mode === 'code' ? `<div class="study-note"><span class="note-icon">✦</span><div><b>Quick idea</b><br>${esc(first)}. Read once, then explain it without looking.</div></div><div class="code-toolbar" id="source-section"><span>🐍 PYTHON SOURCE · ${lines.length} LINES</span><div class="code-controls"><button class="try-first-btn" id="hide-solution">${state.challenge ? 'Show solution' : '🙈 Try first'}</button><div class="size-control" aria-label="Code font size"><button id="font-down" title="Smaller code">−</button><span id="font-size-label">${savedSize}px</span><button id="font-up" title="Larger code">+</button></div></div></div>${state.challenge ? `<div class="challenge-cover"><div class="challenge-emoji">🧠</div><b>First, solve it yourself.</b><p>${challengeFor(item)}</p><button class="action-btn" id="reveal-code">I’m ready to compare →</button></div>` : `<div class="code-scroll"><div class="code-content" style="font-size:${savedSize}px"><div class="line-numbers">${lines.map((_, i) => i + 1).join('\n')}</div><pre>${tokenized(code)}</pre></div></div>`}` : state.mode === 'recall' ? `<div class="recall-card"><div class="recall-head"><span>✍️</span><div><b>Active recall</b><small>Close the code and retrieve it from memory.</small></div></div><p class="recall-question">${esc(learningPrompt(item, code))}</p><textarea id="recall-note" placeholder="Write what you remember…">${esc(note)}</textarea><div class="recall-foot"><span id="note-status">${note ? 'Saved on this device' : 'Your note saves automatically'}</span><button class="action-btn" id="show-hint">Show a hint</button></div><div class="hint-box" id="hint-box" hidden>${esc(first)}</div></div>` : `<div class="practice-card"><div class="practice-label">YOUR MINI CHALLENGE</div><div class="challenge-big">${item.category === 'problems' ? 'Solve it before you peek.' : 'Make the idea yours.'}</div><p>${challengeFor(item)}</p><div class="practice-steps"><div><i>1</i><span>Try it in your editor</span></div><div><i>2</i><span>Test one edge case</span></div><div><i>3</i><span>Explain the solution</span></div></div><button class="action-btn wide-btn" id="practice-peek">Open the repository code →</button></div>`;
+  if (state.mode === 'quiz') modeContent = quizContent(item);
+  if (state.mode === 'run') modeContent = runnerContent(item, code);
   panel.innerHTML = `<div class="detail-head"><div class="detail-tag">${esc(item.categoryLabel)} <span class="tag-separator">/</span> ${brief ? `LEETCODE PROBLEM${brief.id ? ` #${esc(brief.id)}` : ''}` : 'PYTHON STUDY GUIDE'}</div><div class="detail-title-row"><h1 class="detail-title">${esc(item.title)}</h1><div class="detail-actions"><button class="action-btn" id="copy-btn">▣ Copy</button><button class="action-btn" id="save-detail">${state.saved.has(item.path) ? '★ Saved' : '☆ Save'}</button></div></div><div class="detail-path">${esc(item.path)}</div></div><div class="study-tabs" id="study-tools"><button class="study-tab ${state.mode === 'code' ? 'active' : ''}" data-mode="code">Code</button><button class="study-tab ${state.mode === 'recall' ? 'active' : ''}" data-mode="recall">Revise</button><button class="study-tab ${state.mode === 'practice' ? 'active' : ''}" data-mode="practice">Practice</button></div>${modeContent}<button class="mark-done ${state.done.has(item.path) ? 'completed' : ''}" id="done-btn">${state.done.has(item.path) ? '✓  Explored — click to undo' : '○  Mark as explored'}</button>`;
+  panel.querySelector('.study-tabs').insertAdjacentHTML('beforeend', `<button class="study-tab ${state.mode === 'quiz' ? 'active' : ''}" data-mode="quiz">Quick check</button><button class="study-tab ${state.mode === 'run' ? 'active' : ''}" data-mode="run">Run code</button>`);
+  panel.insertAdjacentHTML('beforeend', pathNavigation(item));
   if (brief) {
     const side = $('#problem-panel');
     side.innerHTML = `<div class="problem-card-head"><span class="lc-mark">LC</span><div><div class="problem-kicker">${brief.id ? `LEETCODE · #${esc(brief.id)}` : 'PYTHON PRACTICE'}</div><h3>${esc(brief.name || item.title)}</h3></div></div><div class="difficulty-badge ${brief.difficulty.toLowerCase()}">${esc(brief.difficulty)}</div><div class="problem-tags">${esc(brief.tags)}</div><div class="problem-divider"></div><div class="problem-section-title">PROBLEM</div><p class="problem-description">${esc(brief.description)}</p><div class="example-label">EXAMPLE</div><pre class="problem-example">${esc(brief.example)}</pre><div class="problem-tip"><span>💡</span><p><b>Before you code</b><br>Write down your approach and think of one edge case.</p></div>${brief.url ? `<a class="leetcode-link" href="${esc(brief.url)}" target="_blank" rel="noopener noreferrer">Open official LeetCode problem ↗</a>` : '<div class="practice-only">Repository exercise · no LeetCode link</div>'}`;
   }
-  panel.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { state.mode = b.dataset.mode; showDetail(item, code); });
+  panel.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { cancelPythonWorker(); state.mode = b.dataset.mode; showDetail(item, code); });
   $('#copy-btn').onclick = async () => { await navigator.clipboard.writeText(code); $('#copy-btn').textContent = '✓ Copied!'; setTimeout(() => { if ($('#copy-btn')) $('#copy-btn').textContent = '▣ Copy'; }, 1400); };
   $('#save-detail').onclick = () => { toggleSaved(item.path); render(); showDetail(item, code); };
   $('#done-btn').onclick = () => { state.done.has(item.path) ? state.done.delete(item.path) : state.done.add(item.path); persist(); render(); showDetail(item, code); };
@@ -148,14 +234,63 @@ function showDetail(item, code) {
   if ($('#practice-peek')) $('#practice-peek').onclick = () => { state.mode = 'code'; state.challenge = false; showDetail(item, code); };
   if ($('#recall-note')) $('#recall-note').oninput = e => { localStorage.setItem(notesKey(item.path), e.target.value); $('#note-status').textContent = 'Saved on this device ✓'; };
   if ($('#show-hint')) $('#show-hint').onclick = () => { $('#hint-box').hidden = !$('#hint-box').hidden; $('#show-hint').textContent = $('#hint-box').hidden ? 'Show a hint' : 'Hide hint'; };
+  if ($('#path-previous')) $('#path-previous').onclick = () => openNextInPath(item.path, -1);
+  if ($('#path-next')) $('#path-next').onclick = () => openNextInPath(item.path, 1);
+  if ($('#check-answer')) $('#check-answer').onclick = () => {
+    const quiz = quizBank[item.category] || quizBank.basics;
+    const selected = panel.querySelector('input[name="lesson-quiz"]:checked');
+    const feedback = $('#quiz-feedback');
+    if (!selected) { feedback.hidden = false; feedback.textContent = 'Choose an answer first.'; return; }
+    const correct = Number(selected.value) === quiz.answer;
+    feedback.hidden = false;
+    feedback.className = `quiz-feedback ${correct ? 'correct' : 'incorrect'}`;
+    feedback.textContent = `${correct ? 'Correct. ' : 'Not quite. '}${quiz.why}`;
+    $('#review-schedule').hidden = false;
+  };
+  panel.querySelectorAll('[data-review]').forEach(button => button.onclick = () => scheduleReview(item.path, button.dataset.review));
+  if ($('#runner-editor')) $('#runner-editor').oninput = event => localStorage.setItem(`pyroom-code:${item.path}`, event.target.value);
+  if ($('#reset-editor')) $('#reset-editor').onclick = () => { $('#runner-editor').value = code; localStorage.removeItem(`pyroom-code:${item.path}`); $('#runner-output').textContent = 'Output will appear here.'; };
+  if ($('#run-code')) $('#run-code').onclick = () => {
+    ensurePythonWorker();
+    const source = $('#runner-editor').value;
+    $('#run-code').disabled = true; $('#runner-output').textContent = ''; $('#runner-status').textContent = 'Starting the browser Python runtime…';
+    $('#stop-code').hidden = false;
+    let ready = false;
+    clearTimeout(workerTimer);
+    workerTimer = setTimeout(() => {
+      if (!ready) { pythonWorker?.terminate(); pythonWorker = null; workerReady = false; $('#runner-output').textContent = 'The Python runtime did not start. Check your connection and try again.'; $('#runner-status').textContent = 'Runtime startup timed out.'; $('#run-code').disabled = false; $('#stop-code').hidden = true; }
+    }, 30000);
+    pythonWorker.onmessage = event => {
+      if (!$('#runner-status')) return;
+      if (event.data.type === 'ready') {
+        ready = workerReady = true; clearTimeout(workerTimer); $('#runner-status').textContent = 'Running…';
+        workerTimer = setTimeout(() => { pythonWorker?.terminate(); pythonWorker = null; workerReady = false; $('#runner-output').textContent = 'Stopped after 5 seconds. Check for an infinite loop.'; $('#runner-status').textContent = 'Execution timed out.'; $('#run-code').disabled = false; $('#stop-code').hidden = true; }, 5000);
+        return;
+      }
+      clearTimeout(workerTimer); $('#runner-output').textContent = event.data.output; $('#runner-status').textContent = 'Finished.'; $('#run-code').disabled = false; $('#stop-code').hidden = true;
+    };
+    pythonWorker.onerror = () => { clearTimeout(workerTimer); $('#runner-output').textContent = 'Could not load Pyodide. Check your internet connection and try again.'; $('#runner-status').textContent = 'Runtime unavailable.'; $('#run-code').disabled = false; $('#stop-code').hidden = true; pythonWorker?.terminate(); pythonWorker = null; };
+    pythonWorker.postMessage({ type: 'run', code: source });
+  };
+  if ($('#stop-code')) $('#stop-code').onclick = () => { cancelPythonWorker(); $('#runner-output').textContent = 'Execution stopped.'; $('#runner-status').textContent = 'Stopped.'; $('#run-code').disabled = false; $('#stop-code').hidden = true; };
 }
 document.querySelectorAll('.nav-item').forEach(b => b.onclick = () => {
   state.activeNote = null;
   state.view = b.dataset.view; state.category = 'all'; state.query = ''; $('#search').value = '';
   const first = filtered()[0];
-  if (first) openFile(first.path); else { state.selected = null; render(); }
+  if (first) { openFile(first.path); if (window.matchMedia('(max-width: 760px)').matches) setMobileNav(true); } else { state.selected = null; render(); }
   resetLessonScroll();
 });
+$('#start-path').onclick = () => { const item = nextLesson(); if (item) { openFile(item.path); if (window.matchMedia('(max-width: 760px)').matches) setMobileNav(true); } };
+const mobileNavToggle = $('#mobile-nav-toggle');
+function setMobileNav(collapsed) {
+  $('#sidebar').classList.toggle('nav-collapsed', collapsed);
+  mobileNavToggle.setAttribute('aria-expanded', String(!collapsed));
+  mobileNavToggle.innerHTML = `${collapsed ? 'Browse lessons' : 'Hide lessons'} <span aria-hidden="true">${collapsed ? '⌄' : '⌃'}</span>`;
+}
+if (window.matchMedia('(max-width: 760px)').matches) setMobileNav(true);
+mobileNavToggle.onclick = () => setMobileNav(!$('#sidebar').classList.contains('nav-collapsed'));
+window.addEventListener('resize', () => { if (window.matchMedia('(min-width: 761px)').matches) setMobileNav(false); });
 function applyTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
   localStorage.setItem('pyroom-theme', theme);
