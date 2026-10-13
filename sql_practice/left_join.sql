@@ -6,7 +6,6 @@ SELECT
     o.order_id,
     o.order_date,
     o.amount
-FROM 
-    customers c
-LEFT JOIN 
-    orders o ON c.customer_id = o.customer_id;
+FROM customers c
+LEFT JOIN orders o 
+ON c.customer_id = o.customer_id;

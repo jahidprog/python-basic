@@ -14,7 +14,8 @@ CREATE TABLE orders (
 );
 
 -- Insert sample data into Customers
-INSERT INTO customers (customer_id, customer_name, city) VALUES
+INSERT INTO customers (customer_id, customer_name, city) 
+VALUES
 (1, 'Alice Smith', 'New York'),
 (2, 'Bob Jones', 'Los Angeles'),
 (3, 'Charlie Brown', 'Chicago'),
@@ -22,7 +23,8 @@ INSERT INTO customers (customer_id, customer_name, city) VALUES
 
 -- Insert sample data into Orders
 -- Note: customer_id 99 does not exist in customers (to test outer joins)
-INSERT INTO orders (order_id, customer_id, order_date, amount) VALUES
+INSERT INTO orders (order_id, customer_id, order_date, amount) 
+VALUES
 (101, 1, '2026-01-10', 250.00),
 (102, 1, '2026-01-15', 125.50),
 (103, 2, '2026-01-18', 300.00),
