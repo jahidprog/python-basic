@@ -1,3 +1,4 @@
+"""Vector dot products and matrix-vector multiplication with NumPy."""
 import numpy as np
 
 # 1. Vectors and Dot Product (measures similarity/alignment)

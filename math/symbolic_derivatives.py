@@ -1,3 +1,4 @@
+"""Differentiate a simple loss function symbolically with SymPy."""
 import sympy as sp
 
 # Define symbolic variables

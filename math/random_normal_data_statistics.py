@@ -1,3 +1,4 @@
+"""Summarize mean, variance, and standard deviation for random normal data."""
 import numpy as np
 
 # Generate random data representing model errors or features
