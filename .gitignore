@@ -1,0 +1,5 @@
+# macOS and notebook/Anaconda generated files
+.DS_Store
+.ipynb_checkpoints/
+.virtual_documents/
+anaconda_projects/
