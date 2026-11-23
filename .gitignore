@@ -1,5 +1,12 @@
-# macOS and notebook/Anaconda generated files
+# macOS generated files
 .DS_Store
+
+# Jupyter and notebook generated files
 .ipynb_checkpoints/
 .virtual_documents/
+.jupyter/
+.jupyter_cache/
+.ipython/
+
+# Anaconda generated files
 anaconda_projects/
